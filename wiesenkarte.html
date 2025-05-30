@@ -1,0 +1,53 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Heden Plan 3 – Interaktive Karte</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #map { height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Karte initialisieren
+    const map = L.map('map').setView([57.7077, 11.9800], 18);
+
+    // OpenStreetMap als Hintergrund
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 20,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Polygon für die Wiese
+    const polygon = L.polygon([
+      [57.708193, 11.979772],
+      [57.707782, 11.980205],
+      [57.707891, 11.980770],
+      [57.707372, 11.981419],
+      [57.707095, 11.980299],
+      [57.707611, 11.979622],
+      [57.708193, 11.979772]
+    ], {
+      color: 'green',
+      fillOpacity: 0.3
+    }).addTo(map).bindPopup("Heden Plan 3");
+
+    // Aktueller Standort des Nutzers
+    map.locate({setView: true, maxZoom: 18});
+    map.on('locationfound', function(e) {
+      L.marker(e.latlng).addTo(map).bindPopup("Du bist hier").openPopup();
+      L.circle(e.latlng, {radius: e.accuracy / 2}).addTo(map);
+    });
+
+    map.on('locationerror', function() {
+      alert("Standort konnte nicht ermittelt werden.");
+    });
+  </script>
+</body>
+</html>
