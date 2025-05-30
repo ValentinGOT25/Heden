@@ -1,0 +1,102 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Heden – Windpfeile animiert</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #map { height: 100vh; margin: 0; }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 10px;
+      border-radius: 6px;
+      font-family: sans-serif;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+    }
+    .svg-arrow {
+      width: 24px;
+      height: 24px;
+      transform-origin: center center;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <strong>Wind:</strong> <span id="wind">–</span>
+  </div>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([57.7014, 11.9787], 18);
+
+    const imageUrl = 'heden.jpg';
+    const imageBounds = [
+      [57.702158, 11.977007],
+      [57.700624, 11.980430]
+    ];
+    L.imageOverlay(imageUrl, imageBounds).addTo(map);
+
+    let windArrows = [];
+
+    function createWindArrow(lat, lng, windDirection, windSpeed) {
+      const size = Math.min(80, 20 + windSpeed * 2);
+      const dx = 0.00003 * windSpeed * Math.sin(windDirection * Math.PI / 180);
+      const dy = 0.00003 * windSpeed * Math.cos(windDirection * Math.PI / 180);
+
+      const svgHTML = `
+        <svg class='svg-arrow' style='width: ${size}px; height: ${size}px; transform: rotate(${windDirection}deg);' viewBox='0 0 100 100'>
+          <polygon points='50,0 90,100 50,75 10,100' fill='red'/>
+        </svg>`;
+
+      const arrowIcon = L.divIcon({
+        className: '',
+        html: svgHTML,
+        iconSize: [size, size]
+      });
+
+      const marker = L.marker([lat, lng], { icon: arrowIcon }).addTo(map);
+      return { marker, lat, lng, dx, dy };
+    }
+
+    function animateWindArrows() {
+      windArrows.forEach(obj => {
+        obj.lat += obj.dy;
+        obj.lng += obj.dx;
+        obj.marker.setLatLng([obj.lat, obj.lng]);
+      });
+      requestAnimationFrame(animateWindArrows);
+    }
+
+    fetch("https://api.open-meteo.com/v1/forecast?latitude=57.7014&longitude=11.9787&current_weather=true")
+      .then(response => response.json())
+      .then(data => {
+        const wind = data.current_weather;
+        document.getElementById("wind").textContent = wind.windspeed + " m/s, Richtung " + wind.winddirection + "°";
+
+        // Pfeile in einem Gitter über der Fläche
+        const startLat = 57.7007;
+        const endLat = 57.7020;
+        const startLng = 11.9771;
+        const endLng = 11.9802;
+
+        for (let lat = startLat; lat <= endLat; lat += 0.0004) {
+          for (let lng = startLng; lng <= endLng; lng += 0.0006) {
+            const arrow = createWindArrow(lat, lng, wind.winddirection, wind.windspeed);
+            windArrows.push(arrow);
+          }
+        }
+
+        animateWindArrows();
+      })
+      .catch(() => {
+        document.getElementById("wind").textContent = "Keine Daten";
+      });
+  </script>
+</body>
+</html>
