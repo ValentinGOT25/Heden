@@ -1,0 +1,128 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Heden – Wind korrekt aus Richtung</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 10px;
+      border-radius: 6px;
+      font-family: sans-serif;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+    }
+    #toggleWind {
+      margin-top: 5px;
+    }
+    .svg-arrow {
+      transform-origin: center center;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <strong>Wind:</strong> <span id="wind">–</span><br>
+    <button id="toggleWind">Wind AUS</button>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([57.7014, 11.9787], 18);
+    const imageUrl = 'heden.jpg';
+    const imageBounds = [
+      [57.702158, 11.977007],
+      [57.700624, 11.980430]
+    ];
+    L.imageOverlay(imageUrl, imageBounds).addTo(map);
+
+    let windArrows = [];
+    let animationActive = true;
+
+    document.getElementById("toggleWind").addEventListener("click", () => {
+      animationActive = !animationActive;
+      document.getElementById("toggleWind").textContent = animationActive ? "Wind AUS" : "Wind EIN";
+    });
+
+    function createWindArrow(lat, lng, windDirection, windSpeed) {
+      const width = 10;
+      const length = Math.min(120, 30 + windSpeed * 4);
+
+      // Richtung umkehren: Pfeil zeigt von Windrichtung kommend
+      const arrowDirection = (windDirection + 180) % 360;
+      const dx = 0.00001 * windSpeed * Math.sin(arrowDirection * Math.PI / 180);
+      const dy = 0.00001 * windSpeed * Math.cos(arrowDirection * Math.PI / 180);
+
+      const svgHTML = `
+        <svg class='svg-arrow' style='width: ${width}px; height: ${length}px; transform: rotate(${arrowDirection}deg);' viewBox='0 0 100 100'>
+          <polygon points='50,0 90,100 50,75 10,100' fill='red'/>
+        </svg>`;
+
+      const arrowIcon = L.divIcon({
+        className: '',
+        html: svgHTML,
+        iconSize: [length, width]
+      });
+
+      const marker = L.marker([lat, lng], { icon: arrowIcon }).addTo(map);
+      return { marker, lat, lng, dx, dy };
+    }
+
+    function animateWindArrows() {
+      if (animationActive) {
+        windArrows.forEach(obj => {
+          obj.lat += obj.dy;
+          obj.lng += obj.dx;
+          obj.marker.setLatLng([obj.lat, obj.lng]);
+        });
+      }
+      requestAnimationFrame(animateWindArrows);
+    }
+
+    function clearWindArrows() {
+      windArrows.forEach(obj => map.removeLayer(obj.marker));
+      windArrows = [];
+    }
+
+    function fetchAndDrawWind() {
+      fetch("https://api.open-meteo.com/v1/forecast?latitude=57.7014&longitude=11.9787&current_weather=true")
+        .then(res => res.json())
+        .then(data => {
+          const wind = data.current_weather;
+          document.getElementById("wind").textContent =
+            wind.windspeed + " m/s, aus " + wind.winddirection + "°";
+
+          clearWindArrows();
+
+          const startLat = 57.7007;
+          const endLat = 57.7020;
+          const startLng = 11.9771;
+          const endLng = 11.9802;
+
+          for (let lat = startLat; lat <= endLat; lat += 0.0004) {
+            for (let lng = startLng; lng <= endLng; lng += 0.0005) {
+              const arrow = createWindArrow(lat, lng, wind.winddirection, wind.windspeed);
+              windArrows.push(arrow);
+            }
+          }
+        })
+        .catch(err => {
+          console.error("Winddaten-Fehler:", err);
+          document.getElementById("wind").textContent = "Fehler bei Winddaten";
+        });
+    }
+
+    fetchAndDrawWind();
+    animateWindArrows();
+    setInterval(fetchAndDrawWind, 600000); // alle 10 Minuten
+  </script>
+</body>
+</html>
