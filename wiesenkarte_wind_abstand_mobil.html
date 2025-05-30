@@ -1,0 +1,146 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Heden – Karte mit Wind & Abstand</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 10px;
+      border-radius: 6px;
+      font-family: sans-serif;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+      max-width: 90vw;
+    }
+    #toggleWind {
+      display: block;
+      margin-top: 8px;
+      width: 100%;
+    }
+    .svg-arrow {
+      transform-origin: center center;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <strong>Wind:</strong> <span id="wind">–</span><br>
+    <strong>Abstand zum Punkt:</strong> <span id="distance">–</span>
+    <button id="toggleWind">Wind AUS</button>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map', {
+      zoomControl: false
+    }).setView([57.7014, 11.9787], 18);
+
+    const imageUrl = 'heden.jpg';
+    const imageBounds = [
+      [57.702158, 11.977007],
+      [57.700624, 11.980430]
+    ];
+    L.imageOverlay(imageUrl, imageBounds).addTo(map);
+
+    // Zielpunkt für Abstand
+    const target = L.latLng(57.700905, 11.978096);
+    L.marker(target).addTo(map).bindPopup("Zielpunkt");
+
+    let userMarker, distanceLine;
+    let windArrows = [];
+    let animationActive = true;
+
+    document.getElementById("toggleWind").addEventListener("click", () => {
+      animationActive = !animationActive;
+      document.getElementById("toggleWind").textContent = animationActive ? "Wind AUS" : "Wind EIN";
+    });
+
+    map.locate({ setView: true, maxZoom: 18, watch: true });
+    map.on('locationfound', function(e) {
+      const userLatLng = e.latlng;
+      if (userMarker) map.removeLayer(userMarker);
+      if (distanceLine) map.removeLayer(distanceLine);
+
+      userMarker = L.marker(userLatLng).addTo(map).bindPopup("Du bist hier").openPopup();
+      distanceLine = L.polyline([userLatLng, target], { color: 'blue', weight: 3 }).addTo(map);
+      const distance = userLatLng.distanceTo(target);
+      document.getElementById("distance").textContent = distance.toFixed(1) + " m";
+    });
+
+    function createWindArrow(lat, lng, windDirection, windSpeed) {
+      const width = 10;
+      const length = Math.min(120, 30 + windSpeed * 4);
+      const dx = 0.00001 * windSpeed * Math.sin(windDirection * Math.PI / 180);
+      const dy = 0.00001 * windSpeed * Math.cos(windDirection * Math.PI / 180);
+
+      const svgHTML = `
+        <svg class='svg-arrow' style='width: ${width}px; height: ${length}px; transform: rotate(${windDirection}deg);' viewBox='0 0 100 100'>
+          <polygon points='50,0 90,100 50,75 10,100' fill='red'/>
+        </svg>`;
+
+      const arrowIcon = L.divIcon({
+        className: '',
+        html: svgHTML,
+        iconSize: [length, width]
+      });
+
+      const marker = L.marker([lat, lng], { icon: arrowIcon }).addTo(map);
+      return { marker, lat, lng, dx, dy };
+    }
+
+    function animateWindArrows() {
+      if (animationActive) {
+        windArrows.forEach(obj => {
+          obj.lat += obj.dy;
+          obj.lng += obj.dx;
+          obj.marker.setLatLng([obj.lat, obj.lng]);
+        });
+      }
+      requestAnimationFrame(animateWindArrows);
+    }
+
+    function clearWindArrows() {
+      windArrows.forEach(obj => map.removeLayer(obj.marker));
+      windArrows = [];
+    }
+
+    function fetchAndDrawWind() {
+      fetch("https://api.open-meteo.com/v1/forecast?latitude=57.7014&longitude=11.9787&current_weather=true")
+        .then(response => response.json())
+        .then(data => {
+          const wind = data.current_weather;
+          document.getElementById("wind").textContent = wind.windspeed + " m/s, Richtung " + wind.winddirection + "°";
+
+          clearWindArrows();
+          const startLat = 57.7007;
+          const endLat = 57.7020;
+          const startLng = 11.9771;
+          const endLng = 11.9802;
+
+          for (let lat = startLat; lat <= endLat; lat += 0.0005) {
+            for (let lng = startLng; lng <= endLng; lng += 0.0007) {
+              const arrow = createWindArrow(lat, lng, wind.winddirection, wind.windspeed);
+              windArrows.push(arrow);
+            }
+          }
+        })
+        .catch(() => {
+          document.getElementById("wind").textContent = "Keine Daten";
+        });
+    }
+
+    fetchAndDrawWind();
+    animateWindArrows();
+    setInterval(fetchAndDrawWind, 600000); // alle 10 Minuten
+  </script>
+</body>
+</html>
