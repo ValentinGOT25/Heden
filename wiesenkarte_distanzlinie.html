@@ -1,0 +1,71 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Heden – Distanzlinie & Wind</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #map { height: 100vh; margin: 0; }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 10px;
+      border-radius: 6px;
+      font-family: sans-serif;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <strong>Abstand zu Zielpunkt:</strong> <span id="distance">–</span><br>
+    <strong>Wind:</strong> <span id="wind">–</span>
+  </div>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([57.700905, 11.978096], 18);
+
+    const imageUrl = 'heden.jpg';
+    const imageBounds = [
+      [57.702158, 11.977007],
+      [57.700624, 11.980430]
+    ];
+    L.imageOverlay(imageUrl, imageBounds).addTo(map);
+
+    const target = L.latLng(57.700905, 11.978096);
+    const targetMarker = L.marker(target).addTo(map).bindPopup("Zielpunkt").openPopup();
+
+    let userMarker, distanceLine;
+
+    map.locate({setView: false, maxZoom: 18});
+    map.on('locationfound', function(e) {
+      const userLatLng = e.latlng;
+
+      if (userMarker) map.removeLayer(userMarker);
+      if (distanceLine) map.removeLayer(distanceLine);
+
+      userMarker = L.marker(userLatLng).addTo(map).bindPopup("Du bist hier").openPopup();
+      distanceLine = L.polyline([userLatLng, target], { color: 'blue', weight: 3 }).addTo(map);
+
+      const distance = userLatLng.distanceTo(target);
+      document.getElementById("distance").textContent = distance.toFixed(1) + " m";
+    });
+
+    fetch("https://api.open-meteo.com/v1/forecast?latitude=57.7014&longitude=11.9787&current_weather=true")
+      .then(response => response.json())
+      .then(data => {
+        const wind = data.current_weather;
+        document.getElementById("wind").textContent = wind.windspeed + " m/s, Richtung " + wind.winddirection + "°";
+      })
+      .catch(() => {
+        document.getElementById("wind").textContent = "Keine Daten";
+      });
+  </script>
+</body>
+</html>
