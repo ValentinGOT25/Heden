@@ -1,0 +1,164 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Heden – Wind sanfter & länger</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 10px;
+      border-radius: 6px;
+      font-family: sans-serif;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+      max-width: 90vw;
+    }
+    .svg-arrow {
+      transform-origin: center center;
+    }
+    #toggleWind {
+      margin-top: 5px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <strong>Wind:</strong> <span id="wind">–</span><br>
+    <strong>Abstand:</strong> <span id="distance">–</span><br>
+    <button id="toggleWind">Wind AUS</button><br>
+    <span id="error" style="color:red;"></span>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([57.7014, 11.9787], 18);
+    const imageUrl = 'heden.jpg';
+    const imageBounds = [
+      [57.702158, 11.977007],
+      [57.700624, 11.980430]
+    ];
+    L.imageOverlay(imageUrl, imageBounds).addTo(map);
+
+    const target = L.latLng(57.700905, 11.978096);
+    L.marker(target).addTo(map).bindPopup("Zielpunkt");
+
+    let userMarker, distanceLine;
+    let windArrows = [];
+    let animationActive = true;
+
+    document.getElementById("toggleWind").addEventListener("click", () => {
+      animationActive = !animationActive;
+      document.getElementById("toggleWind").textContent = animationActive ? "Wind AUS" : "Wind EIN";
+    });
+
+    function updateDistance(userLatLng) {
+      if (distanceLine) map.removeLayer(distanceLine);
+      distanceLine = L.polyline([userLatLng, target], { color: 'blue', weight: 3 }).addTo(map);
+      const distance = userLatLng.distanceTo(target);
+      document.getElementById("distance").textContent = distance.toFixed(1) + " m";
+    }
+
+    function showError(msg) {
+      document.getElementById("error").textContent = msg;
+    }
+
+    map.locate({ setView: true, maxZoom: 18, watch: true, enableHighAccuracy: true });
+
+    map.on('locationfound', function(e) {
+      document.getElementById("error").textContent = "";
+      const userLatLng = e.latlng;
+      if (userMarker) map.removeLayer(userMarker);
+      userMarker = L.marker(userLatLng).addTo(map).bindPopup("Du bist hier");
+      updateDistance(userLatLng);
+    });
+
+    map.on('locationerror', function(e) {
+      showError("Standort konnte nicht ermittelt werden. Bitte Standortfreigabe aktivieren.");
+    });
+
+    function getWindColor(speed) {
+      if (speed < 3) return "green";
+      if (speed < 6) return "yellow";
+      if (speed < 10) return "orange";
+      return "red";
+    }
+
+    function createWindArrow(lat, lng, windDirection, windSpeed) {
+      const width = 10;
+      const length = Math.min(160, 60 + windSpeed * 6); // längere Pfeile
+      const arrowDir = (windDirection + 180) % 360;
+      const dx = 0.000002 * windSpeed * Math.sin(arrowDir * Math.PI / 180); // halbe Geschwindigkeit
+      const dy = 0.000002 * windSpeed * Math.cos(arrowDir * Math.PI / 180);
+      const color = getWindColor(windSpeed);
+
+      const svgHTML = `
+        <svg class='svg-arrow' style='width: ${width}px; height: ${length}px; transform: rotate(${arrowDir}deg);' viewBox='0 0 100 100'>
+          <polygon points='50,0 90,100 50,75 10,100' fill='${color}'/>
+        </svg>`;
+
+      const arrowIcon = L.divIcon({
+        className: '',
+        html: svgHTML,
+        iconSize: [length, width]
+      });
+
+      const marker = L.marker([lat, lng], { icon: arrowIcon }).addTo(map);
+      return { marker, lat, lng, dx, dy, startLat: lat, startLng: lng };
+    }
+
+    function animateWindArrows() {
+      if (animationActive) {
+        windArrows.forEach(obj => {
+          obj.lat += obj.dy;
+          obj.lng += obj.dx;
+          const bounds = map.getBounds();
+          if (!bounds.contains([obj.lat, obj.lng])) {
+            obj.lat = obj.startLat;
+            obj.lng = obj.startLng;
+          }
+          obj.marker.setLatLng([obj.lat, obj.lng]);
+        });
+      }
+      requestAnimationFrame(animateWindArrows);
+    }
+
+    function clearWindArrows() {
+      windArrows.forEach(obj => map.removeLayer(obj.marker));
+      windArrows = [];
+    }
+
+    function fetchAndDrawWind() {
+      fetch("https://api.open-meteo.com/v1/forecast?latitude=57.7014&longitude=11.9787&current_weather=true")
+        .then(res => res.json())
+        .then(data => {
+          const wind = data.current_weather;
+          document.getElementById("wind").textContent =
+            wind.windspeed + " m/s, aus " + wind.winddirection + "°";
+          clearWindArrows();
+          for (let lat = 57.7007; lat <= 57.7020; lat += 0.0004) {
+            for (let lng = 11.9771; lng <= 11.9803; lng += 0.0005) {
+              const arrow = createWindArrow(lat, lng, wind.winddirection, wind.windspeed);
+              windArrows.push(arrow);
+            }
+          }
+        })
+        .catch(err => {
+          document.getElementById("wind").textContent = "Fehler bei Winddaten";
+        });
+    }
+
+    fetchAndDrawWind();
+    animateWindArrows();
+    setInterval(fetchAndDrawWind, 600000);
+  </script>
+</body>
+</html>
