@@ -1,0 +1,35 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Heden Bild-Overlay</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #map { height: 100vh; margin: 0; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([57.7014, 11.9787], 18);
+
+    const imageUrl = 'heden.jpg';
+    const imageBounds = [
+      [57.702158, 11.977007],  // Nordwest
+      [57.700624, 11.98043]   // Südost
+    ];
+
+    // Bild als Karten-Overlay
+    L.imageOverlay(imageUrl, imageBounds).addTo(map);
+
+    // Standort anzeigen
+    map.locate({setView: false, maxZoom: 18});
+    map.on('locationfound', function(e) {
+      L.marker(e.latlng).addTo(map).bindPopup("Du bist hier").openPopup();
+    });
+  </script>
+</body>
+</html>
